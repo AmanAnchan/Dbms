@@ -256,6 +256,26 @@ router.put('/update-vehicle/:id', requireAuth, async (req, res) => {
 });
 
 
+router.get('/view-feedback', requireAuth, async (req, res) => {
+  const admin_id = req.session.admin.id;
+
+  try {
+      const [feedbacks] = await pool.query(`
+          SELECT f.f_id, f.comments, v.v_name, u.user_name, f.created_at
+          FROM feedback f
+          JOIN vehicle v ON f.vehicle_id = v.v_id
+          JOIN user u ON f.user_id = u.user_id
+          WHERE f.admin_id = ?
+      `, [admin_id]);
+
+      res.render('viewFeedback', { feedbacks });
+  } catch (error) {
+      console.error('Error fetching feedback:', error);
+      res.status(500).send('Server error');
+  }
+});
+
+
 
 router.get('/logout', (req, res) => {
     req.session.destroy(err => {

@@ -209,16 +209,63 @@ router.get('/user-bookings/:u_id', requireAuth, async (req, res) => {
     const { u_id } = req.params;
 
     try {
-        const [bookings] = await pool.query(
-            'SELECT b.book_id, b.book_date, b.destination, b.price, b.return_date, b.booking_status, v.v_name, v.v_type, p.total_price, p.payment_method FROM booking b JOIN vehicle v ON b.v_id = v.v_id JOIN payment p ON b.payment_id = p.pay_id WHERE b.u_id = ?',
-            [u_id]
-        );
-        res.render('userBookingView',{bookings})
+        const [bookings] = await pool.query(`
+            SELECT b.book_id, b.book_date, b.destination, b.price, b.return_date, b.booking_status, b.a_id,
+                   v.v_name, v.v_type, p.total_price, p.payment_method, v.v_id,
+                   (SELECT COUNT(*) FROM feedback f WHERE f.book_id = b.book_id) AS feedback_exists
+            FROM booking b 
+            JOIN vehicle v ON b.v_id = v.v_id 
+            JOIN payment p ON b.payment_id = p.pay_id 
+            WHERE b.u_id = ?
+        `, [u_id]);
+
+        res.render('userBookingView', { bookings });
     } catch (error) {
         console.error('Error fetching user bookings:', error);
         res.status(500).send('Server error');
     }
 });
+
+
+// Render Feedback Form
+router.get('/give-feedback/:vehicle_id', requireAuth, async (req, res) => {
+    const { vehicle_id } = req.params;
+    const { admin_id , book_id } = req.query;
+
+    res.render('feedbackForm', { vehicle_id, admin_id ,book_id});
+});
+
+// Handle Feedback Submission
+router.post('/submit-feedback', requireAuth, async (req, res) => {
+    const { comments, vehicle_id, admin_id, book_id } = req.body;
+    const user_id = req.session.user.id;
+
+    try {
+        // Check if feedback already exists for this booking
+        const [existingFeedback] = await pool.query(
+            'SELECT * FROM feedback WHERE book_id = ?',
+            [book_id]
+        );
+
+        if (existingFeedback.length > 0) {
+            return res.status(400).send('Feedback already submitted for this booking.');
+        }
+
+        // Insert the feedback into the database
+        await pool.query(
+            'INSERT INTO feedback (comments, vehicle_id, user_id, admin_id, book_id) VALUES (?, ?, ?, ?, ?)',
+            [comments, vehicle_id, user_id, admin_id, book_id]
+        );
+
+        res.redirect(`/user-bookings/${user_id}`);
+    } catch (error) {
+        console.error('Error submitting feedback:', error);
+        res.status(500).send('Server error');
+    }
+});
+
+
+
 
 // Logout
 router.get('/logout', (req, res) => {
